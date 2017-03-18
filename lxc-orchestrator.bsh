@@ -125,8 +125,8 @@ if [ "$1" = "-s" ]; then
     echo "=============================="
     printf "Day: $(cat $C_DAY 2>/dev/null)\n\n"
     printf "  Running: %3d |    Done: %3d\n" \
-            $(lxc-ls -f | grep -c RUNNING) (cat $SWARM_DONE 2>/dev/null| wc -l)
-    printf "Protected: %3d | Pending: %3d\n"
+            $(lxc-ls -f | grep -c RUNNING) $(cat $SWARM_DONE 2>/dev/null| wc -l)
+    printf "Protected: %3d | Pending: %3d\n" \
             $(cat $P_SWARM 2>/dev/null | wc -l) $(cat $SWARM 2>/dev/null| wc -l)
     echo
     exit 0
