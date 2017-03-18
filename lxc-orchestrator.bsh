@@ -1,0 +1,206 @@
+#!/bin/bash
+#
+# Orchestrate swarm of LXC containers running puppet agents
+#
+# Rules:
+#
+# - each day randomly select P protected instances and keep
+#   them running for the whole day
+# - from remaining (N-P) instances randomly select S instances,
+#   start them, let them run for T minutes, and then shut them down.
+# - repeat cycle until day ends or all instances are cycled
+# - selection should randomly pick only instances that have not run
+#   today
+# - if all instances have been cycled and day has not ended yet
+#   keep last set of instances running till the day end
+# - if the are more instances that can be cycled with a day
+#   proceed with cycling till the day end and ignore instances that
+#   have not been started this day. 
+
+# Instances not started today, shuffled order
+SWARM="/tmp/lxc-orch-swarm.dat"
+# Set of protected instances for today
+P_SWARM="/tmp/lxc-orch-swarm-protected.dat"
+# Instances that are scheduled to start next
+SWARM_PENDING="/tmp/lxc-orch-swarm-starting.dat"
+# Instances that have been started today
+SWARM_DONE="/tmp/lxc-orch-swarm-cycled.dat"
+# Current day
+C_DAY="/tmp/lxc-orch-swarm-day.dat"
+# Lock file
+LOCK="/tmp/lxc-orch-swarm.lock"
+
+# -------------------------------------------------------------------
+P_SIZE=8            # Number of protected intances
+S_SIZE=5            # Number of instances cycled
+INTERVAL=$((45*60)) # How long should cycled instances run in secs
+DELAY=15            # Aux delay between start/stop in sec
+# -------------------------------------------------------------------
+
+debug() {
+    [ -z "$DEBUG" ] || echo " ### DEBUG: $1" > /dev/tty
+}
+
+debug_cat() {
+    [ -z "$DEBUG" ] && return
+    {
+        echo " ### DEBUG OUTPUT: File $1 ###" 
+        cat "$1"
+        echo " ### END OF DEBUG OUTPUT ###"
+    } > /dev/tty
+}
+
+# Get N instances from the whole swarm
+get_swarm() {
+    local SIZE="$1"
+    local TMP="/tmp/lxc-orch-swarm-get.tmp"
+
+    cat "$SWARM" | tail -$SIZE | tee "$TMP"
+    cat "$SWARM" | grep -vFf "$TMP" > "$TMP.2"
+    debug_cat "$TMP"
+    debug "WAS: $(wc -l $SWARM)"
+    mv "$TMP.2" "$SWARM"
+    debug "WAS: $(wc -l $SWARM)"
+    /bin/rm -f "$TMP"
+
+}
+
+# Start instances specified in file
+start_swarm() {
+    local SWARM="$1"
+
+    [ -f "$SWARM" ] || return
+
+    lxc-ls -f | awk '$1!~/NAME|pe-master|puppet/&&$2~/RUNNING/{print $1}' | \
+        grep -f $SWARM | \
+        while read lxc; do
+            echo "Already up: $lxc"
+        done
+    lxc-ls -f | awk '$1!~/NAME|pe-master|puppet/&&$2!~/RUNNING/{print $1}' | \
+        grep -f $SWARM | \
+        while read lxc; do
+            echo "Starting LXC $lxc ..."    
+            lxc-start -n $lxc
+        done
+    
+}
+
+# Stop instances specified in file
+stop_swarm() {
+    local SWARM="$1"
+
+    [ -f "$SWARM" ] || return
+
+
+#   lxc-ls -f | awk '$1!~/NAME|pe-master|puppet/&&$2!~/RUNNING/{print $1}' | \
+#       grep -f $SWARM | \
+#       while read lxc; do
+#           echo "Already down: $lxc"
+#       done
+    lxc-ls -f | awk '$1!~/NAME|pe-master|puppet/&&$2~/RUNNING/{print $1}' | \
+        grep -f $SWARM | \
+        while read lxc; do
+            echo "Stopping LXC $lxc ..."    
+            lxc-stop -n $lxc
+        done 
+}
+
+# Delay for N sec
+delay() {
+    local D="$1"
+    echo "* [ $(date +%Y-%m-%dT%H:%M:%SZ --utc) ] Pausing for $D sec"
+    sleep $D
+}
+
+########
+# main #
+########
+# Overrides for debugging
+# INTERVAL=15
+# DELAY=5
+
+if [ "$1" = "-s" ]; then
+    [ ! -f "$LOCK" ] && echo "WARNING: No lock file detected, orchestrator is not running"
+    echo "LXC swarm orchestrator status:"
+    echo "=============================="
+    echo "Day: $(cat $C_DAY 2>/dev/null)"
+    echo "Running  : $(lxc-ls -f | grep -c RUNNING)"
+    echo "Protected: $(cat $P_SWARM 2>/dev/null | wc -l)"
+    echo "Done: $(cat $SWARM_DONE 2>/dev/null| wc -l) Pending: $(cat $SWARM 2>/dev/null| wc -l)"
+    echo 
+    exit 0
+fi
+
+if [ -f "$LOCK" ]; then
+    echo "Lock file detected, please use -s to get status"
+    echo "If orchstrator has crashed or died, remove the lock manually:"
+    echo "   $LOCK"
+    exit 1
+fi
+
+trap "{ echo -e \"\nInterrupted, cleaning up and exiting ...\"; rm -f $LOCK; exit 1; }" SIGINT SIGTERM
+touch $LOCK
+
+rm -f "$P_SWARM" "$SWARM_PENDING" "$SWARM_DONE" "$C_DAY" "$SWARM"
+
+while : ; do
+
+    # If day changes or we run for the first time
+    if [ ! -f "$C_DAY" -o "$(cat $C_DAY 2>/dev/null)" != "$DAY" ]; then
+        DAY=$(date +%a)
+        echo $DAY > "$C_DAY"
+        lxc-ls -f | awk '$1!~/pe-master|puppet|NAME/{print $1}' | shuf > "$SWARM"
+        rm -f "$P_SWARM" "$SWARM_PENDING" "$SWARM_DONE"
+
+        ############################
+        # Stop any stary instances #
+        ############################
+        echo
+        echo "****************"
+        echo "* New day: $DAY *"
+        echo "****************"
+        echo "> Stopping all running instances ..."
+        stop_swarm "$SWARM"
+        echo
+
+        ##############################
+        # Start protected daily pack #
+        ##############################
+        get_swarm $P_SIZE > "$P_SWARM"
+        echo "> Starting $P_SIZE protected instances for $DAY"
+        echo "========================================="
+        start_swarm "$P_SWARM"
+    
+        delay $DELAY
+        echo
+    fi
+
+    # Check there are pending instances
+    if [ $(cat $SWARM | wc -l) -eq 0 ]; then
+        echo "> All instances have been cycled for $DAY."
+        delay $INTERVAL
+        continue
+    fi
+
+    echo "> Starting $S_SIZE instances"
+    echo "============================"
+
+    get_swarm $S_SIZE >> $SWARM_PENDING
+    start_swarm "$SWARM_PENDING"
+
+    delay $DELAY
+    echo
+    echo "> Stopping cycled instances"
+    stop_swarm "$SWARM_DONE"
+
+    cat "$SWARM_PENDING" >> "$SWARM_DONE"
+    rm -f "$SWARM_PENDING"
+    echo "----------------------------"
+    echo "* Running: $(lxc-ls -f | grep -c RUNNING) Protected: $(cat $P_SWARM | wc -l)"
+    echo "* Done: $(cat $SWARM_DONE | wc -l) Pending: $(cat $SWARM | wc -l)"
+    echo
+    delay $INTERVAL
+    echo
+done
+
+rm -f "$LOCK"
