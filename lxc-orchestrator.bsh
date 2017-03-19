@@ -147,8 +147,8 @@ rm -f "$P_SWARM" "$SWARM_PENDING" "$SWARM_DONE" "$C_DAY" "$SWARM"
 while : ; do
 
     # If day changes or we run for the first time
+    DAY=$(date +%a)
     if [ ! -f "$C_DAY" -o "$(cat $C_DAY 2>/dev/null)" != "$DAY" ]; then
-        DAY=$(date +%a)
         echo $DAY > "$C_DAY"
         lxc-ls -f | awk '$1!~/pe-master|puppet|NAME/{print $1}' | shuf > "$SWARM"
         rm -f "$P_SWARM" "$SWARM_PENDING" "$SWARM_DONE"
