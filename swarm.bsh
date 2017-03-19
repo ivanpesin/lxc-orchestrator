@@ -18,7 +18,14 @@ case "$1" in
     create|mk)
         case "$2" in
             client|c)
-                $BASEDIR/mk-lxc-client.bsh $3 $4 $5;;
+                TYPE=$3
+                CENTOSREL=$4
+                STARTID=$5
+                COUNT=$6
+                [ -z "$COUNT" ] && COUNT=1
+                for i in {1..$COUNT}; do
+                    $BASEDIR/mk-lxc-client.bsh $TYPE $CENTOSREL $((STARTID + COUNT - 1));;
+                done
         esac;;
     destroy|rm)
         [ -z "$2" ] && usage
