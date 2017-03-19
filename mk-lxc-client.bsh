@@ -73,8 +73,8 @@ echo "LXC $LXC: Setting hostname ..."
 chroot /var/lib/lxc/$LXC/rootfs sed -i '/^HOSTNAME=/s/$/.local/' /etc/sysconfig/network
 chroot /var/lib/lxc/$LXC/rootfs sed -i '/^HOSTNAME=/s/$/.local/' /etc/sysconfig/network-scripts/ifcfg-eth0
 
-#[ $REL = "6" ] && \
-#	echo -e "source /etc/sysconfig/network\nhostname \$HOSTNAME" >> /var/lib/lxc/$LXC/rootfs/etc/rc.d/rc.local
+[ $REL = "6" ] && \
+	echo -e "source /etc/sysconfig/network\nhostname \$HOSTNAME" >> /var/lib/lxc/$LXC/rootfs/etc/rc.d/rc.local
 
 echo "LXC $LXC: Setting up name server ..."
 echo "nameserver 192.168.122.1" > /var/lib/lxc/$LXC/rootfs/etc/resolv.conf

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+BASEDIR=`pwd`
+
 usage() {
 	cat <<EOF
 	swarm [stop|start] [masters]
@@ -16,7 +18,7 @@ case "$1" in
     create|mk)
         case "$2" in
             client|c)
-                ./mk-lxc-client $3 $4 $5;;
+                $BASEDIR/mk-lxc-client.bsh $3 $4 $5;;
         esac;;
     destroy|rm)
         [ -z "$2" ] && usage
