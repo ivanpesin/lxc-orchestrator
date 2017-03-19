@@ -24,8 +24,8 @@ case "$1" in
                 COUNT=$6
                 [ -z "$COUNT" ] && COUNT=1
                 for i in {1..$COUNT}; do
-                    $BASEDIR/mk-lxc-client.bsh $TYPE $CENTOSREL $((STARTID + COUNT - 1));;
-                done
+                    $BASEDIR/mk-lxc-client.bsh $TYPE $CENTOSREL $((STARTID + i - 1))
+                done;;
         esac;;
     destroy|rm)
         [ -z "$2" ] && usage
