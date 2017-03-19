@@ -1,0 +1,112 @@
+#!/bin/bash
+
+#
+# Script creates LXC container with puppet client
+# Supports PE and CE agent types
+#
+
+# ---
+MEM="128M"
+MEMSW="256M"
+ROOTPW=""
+PE_MASTER="pe-master.local"
+CE_MASTER="puppet.local"
+# ---
+
+if [ "$1" = "-h" -o $# -lt 3 ]; then
+	echo "$0 {type} {centos release} {ID}"
+	echo
+	echo "	Creates LXC container to act as puppet clinet"
+	echo "  {type}            Client type: pe or ce"
+	echo "  {centos release}  Supported: 6 or 7"
+	echo "  {ID}              Container ID (last IP octet)"
+	echo ""
+	exit
+fi
+
+TYPE="$1"
+REL="$2"
+ID="$3"
+
+LXC="p-c-$ID"
+MASTER=$CE_MASTER
+if [ "$TYPE" = "pe" ]; then
+    LXC="pe-c-$ID"
+    MASTER=$PE_MASTER
+fi
+
+if [ $REL != "6" -a $REL != "7" ]; then
+	echo "Unsupported CentOS release: $REL"
+	exit 1
+fi
+
+if [ $(lxc-ls -1 | grep '^'$LXC'$') ]; then
+	echo "LXC exists: $LXC"
+	exit 1
+fi
+
+if [ $TYPE != "pe" -a $TYPE != "ce" ]; then
+    echo "Unsupported client type: $TYPE"
+    exit 1
+fi
+
+[ $REL = 6 ] && PATH=$PATH:/bin:/sbin
+
+echo "LXC $LXC: Creating CentOS $REL ..."
+lxc-create -n $LXC -t download -- -d centos -r $REL -a amd64
+
+echo "LXC $LXC: Setting up IP, default gw, and memory limits ..."
+cat >>/var/lib/lxc/$LXC/config <<EOF
+lxc.network.ipv4 = 192.168.122.$ID/24
+lxc.network.ipv4.gateway = 192.168.122.1
+
+lxc.cgroup.memory.limit_in_bytes = $MEM
+lxc.cgroup.memory.memsw.limit_in_bytes = $MEMSW
+
+lxc.tty = 2
+EOF
+
+echo "LXC $LXC: Disabling DHCP ..."
+chroot /var/lib/lxc/$LXC/rootfs sed -i 's/BOOTPROTO=dhcp/BOOTPROTO=static/' /etc/sysconfig/network-scripts/ifcfg-eth0
+
+echo "LXC $LXC: Setting hostname ..."
+chroot /var/lib/lxc/$LXC/rootfs sed -i '/^HOSTNAME=/s/$/.local/' /etc/sysconfig/network
+chroot /var/lib/lxc/$LXC/rootfs sed -i '/^HOSTNAME=/s/$/.local/' /etc/sysconfig/network-scripts/ifcfg-eth0
+
+#[ $REL = "6" ] && \
+#	echo -e "source /etc/sysconfig/network\nhostname \$HOSTNAME" >> /var/lib/lxc/$LXC/rootfs/etc/rc.d/rc.local
+
+echo "LXC $LXC: Setting up name server ..."
+echo "nameserver 192.168.122.1" > /var/lib/lxc/$LXC/rootfs/etc/resolv.conf
+echo "192.168.122.$ID ${LXC}.local" >> /var/lib/lxc/$LXC/rootfs/etc/hosts
+
+echo "LXC $LXC: Setting up root pw ..."
+echo "root:$ROOTPW" | chroot /var/lib/lxc/$LXC/rootfs chpasswd
+
+echo "LXC $LXC: Starting ..."
+lxc-start -n $LXC
+sleep 15
+
+echo "LXC $LXC: Live configuration ..."
+
+lxc-attach -n $LXC -- yum -y install deltarpm which openssh-server epel-release
+if [ $TYPE = "ce" ]; then
+    lxc-attach -n $LXC -- rpm -Uvh https://yum.puppetlabs.com/puppetlabs-release-pc1-el-$REL.noarch.rpm
+else
+    lxc-attach -n $LXC -- yum -y install cronie
+fi
+
+if [ $REL = "6" ]; then
+	lxc-attach -n $LXC -- chkconfig sshd on
+	lxc-attach -n $LXC -- service sshd start
+else
+	lxc-attach -n $LXC -- hostnamectl set-hostname ${LXC}.local
+	lxc-attach -n $LXC -- systemctl enable sshd
+	lxc-attach -n $LXC -- systemctl start sshd
+fi
+
+[ $TYPE = "ce" ] && lxc-attach -n $LXC -- yum -y install puppet-agent
+[ $TYPE = "pe" ] && lxc-attach -n $LXC -- yum -y install http://pm.puppetlabs.com/puppet-agent/2016.4.2/1.7.1/repos/el/6/PC1/x86_64/puppet-agent-1.7.1-1.el6.x86_64.rpm
+echo "server = $MASTER" >> /var/lib/lxc/$LXC/rootfs/etc/puppetlabs/puppet/puppet.conf
+lxc-attach -n $LXC -- /opt/puppetlabs/bin/puppet agent -t
+lxc-attach -n $LXC -- /opt/puppetlabs/bin/puppet resource service puppet ensure=running enable=true
