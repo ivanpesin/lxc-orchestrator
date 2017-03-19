@@ -1,0 +1,39 @@
+#!/bin/bash
+
+usage() {
+	cat <<EOF
+	swarm [stop|start] [masters]
+EOF
+}
+
+delay() {
+	local D="$1"
+	echo "Delaying $D sec ..."
+	sleep $D
+}
+
+case "$1" in
+    create|mk)
+        case "$2" in
+            client|c)
+                ./mk-lxc-client $3 $4 $5;;
+        esac;;
+    destroy|rm)
+        [ -z "$2" ] && usage
+        lxc-stop -n $2
+        lxc-destroy -n $2;;
+    list|ls) 
+        [ "$2" = "-l" ] && lxc-ls -f || lxc-ls;;
+	start) 
+		case "$2" in
+			"masters")
+				echo "Starting Puppet master community ..."
+				lxc-start -n puppet
+				delay 15
+				echo "Starting Puppet master enterprise ..."
+			        lxc-start -n pe-master
+				;;
+			*) usage;;
+		esac;;
+	*) usage;;
+esac
