@@ -1,0 +1,52 @@
+#!/bin/bash
+#
+# CentOS 6 LXC doesn't set hostname from /etc/sysconfig/network
+# This script will start after networking and set hostname
+# 
+# Created: Ivan Pesin
+#
+# chkconfig: 345 11 89
+
+. /etc/rc.d/init.d/functions
+
+start() {
+    HOSTNAME=$(/bin/hostname)
+
+    [ -f /etc/sysconfig/network ] && . /etc/sysconfig/network
+    [ -z "$HOSTNAME" -o "$HOSTNAME" = "(none)" ] && HOSTNAME=localhost
+
+    # Set the hostname.
+    action $"Setting hostname ${HOSTNAME}: " hostname ${HOSTNAME}
+}
+
+stop() {
+    echo -n $"Hostname on shutdown: $(/bin/hostname --fqdn) "
+    passed
+    echo
+}
+
+restart() {
+    stop
+    start
+}
+
+# See how we were called.
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  status)
+    echo $"Hostname: $(/bin/hostname --fqdn)"
+    ;;
+  restart|reload)
+    restart
+    ;;
+  *)
+    echo $"Usage: $0 {start|stop|status|restart|reload}"
+    exit 2
+esac
+
+exit $?

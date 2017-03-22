@@ -13,6 +13,8 @@ PE_MASTER="pe-master.local"
 CE_MASTER="puppet.local"
 # ---
 
+BASEDIR=$( cd $(dirname $0) && pwd )
+
 if [ "$1" = "-h" -o $# -lt 3 ]; then
 	echo "$0 {type} {centos release} {ID}"
 	echo
@@ -73,8 +75,10 @@ echo "LXC $LXC: Setting hostname ..."
 chroot /var/lib/lxc/$LXC/rootfs sed -i '/^HOSTNAME=/s/$/.local/' /etc/sysconfig/network
 chroot /var/lib/lxc/$LXC/rootfs sed -i '/^HOSTNAME=/s/$/.local/' /etc/sysconfig/network-scripts/ifcfg-eth0
 
-[ $REL = "6" ] && \
-	echo -e "source /etc/sysconfig/network\nhostname \$HOSTNAME" >> /var/lib/lxc/$LXC/rootfs/etc/rc.d/rc.local
+[ $REL = "6" ] && {
+    cp $BASEDIR/files/lxc-hostname /var/lib/lxc/$LXC/rootfs/etc/rc.d/init.d
+    chroot /var/lib/lxc/$LXC/rootfs /sbin/chkconfig lxc-hostname on
+}
 
 echo "LXC $LXC: Setting up name server ..."
 echo "nameserver 192.168.122.1" > /var/lib/lxc/$LXC/rootfs/etc/resolv.conf
@@ -107,6 +111,9 @@ fi
 
 [ $TYPE = "ce" ] && lxc-attach -n $LXC -- yum -y install puppet-agent
 [ $TYPE = "pe" ] && lxc-attach -n $LXC -- yum -y install http://pm.puppetlabs.com/puppet-agent/2016.4.2/1.7.1/repos/el/6/PC1/x86_64/puppet-agent-1.7.1-1.el6.x86_64.rpm
+
 echo "server = $MASTER" >> /var/lib/lxc/$LXC/rootfs/etc/puppetlabs/puppet/puppet.conf
+
 lxc-attach -n $LXC -- /opt/puppetlabs/bin/puppet agent -t
 lxc-attach -n $LXC -- /opt/puppetlabs/bin/puppet resource service puppet ensure=running enable=true
+
