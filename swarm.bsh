@@ -32,7 +32,10 @@ case "$1" in
         lxc-stop -n $2
         lxc-destroy -n $2;;
     list|ls) 
-        [ "$2" = "-l" ] && lxc-ls -f || lxc-ls;;
+        case "$2" in
+            -l) lxc-ls -f;;
+            -r) lxc-ls -f | awk '$2=="RUNNING"{print $1}';;
+            -lr|-rl) lxc-ls -f | awk '$2=="RUNNING"';;
 	start) 
 		case "$2" in
 			"masters")
