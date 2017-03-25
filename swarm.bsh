@@ -49,9 +49,14 @@ case "$1" in
 				;;
 			*) usage;;
 		esac;;
-    stop) 
-        shift;
-        for i in "$@"; do
+    stop)
+        case "$2" in
+            clients|c)
+                LIST=$(lxc-list -f | awk '/^pe?-c-[0-9]+ +RUNNING/{ print $1 }');;
+            *) shift; LIST="$@";;
+        esac
+        
+        for i in "$LIST"; do
             echo "Stopping LXC: $i ..."
             lxc-stop -n $i
         done;;
