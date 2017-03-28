@@ -29,6 +29,7 @@ SWARM_DONE="/tmp/lxc-orch-swarm-cycled.dat"
 C_DAY="/tmp/lxc-orch-swarm-day.dat"
 # Lock file
 LOCK="/tmp/lxc-orch-swarm.lock"
+AWK_LXC="pe?-c-[0-9]+"   # regex to exclude LXCs
 
 # -------------------------------------------------------------------
 P_SIZE=8            # Number of protected intances
@@ -71,12 +72,12 @@ start_swarm() {
 
     [ -f "$SWARM" ] || return
 
-    lxc-ls -f | awk '$1!~/NAME|pe-master|puppet/&&$2~/RUNNING/{print $1}' | \
+    lxc-ls -f | awk '$1~/'$AWK_LXC_PATTERN'/&&$2~/RUNNING/{print $1}' | \
         grep -f $SWARM | \
         while read lxc; do
             echo "Already up: $lxc"
         done
-    lxc-ls -f | awk '$1!~/NAME|pe-master|puppet/&&$2!~/RUNNING/{print $1}' | \
+    lxc-ls -f | awk '$1~/'$AWK_LXC_PATTERN'/&&$2!~/RUNNING/{print $1}' | \
         grep -f $SWARM | \
         while read lxc; do
             echo "Starting LXC $lxc ..."    
@@ -97,7 +98,7 @@ stop_swarm() {
 #       while read lxc; do
 #           echo "Already down: $lxc"
 #       done
-    lxc-ls -f | awk '$1!~/NAME|pe-master|puppet/&&$2~/RUNNING/{print $1}' | \
+    lxc-ls -f | awk '$1~/'$AWK_LXC_PATTERN'/&&$2~/RUNNING/{print $1}' | \
         grep -f $SWARM | \
         while read lxc; do
             echo "Stopping LXC $lxc ..."    
@@ -150,7 +151,7 @@ while : ; do
     DAY=$(date +%a)
     if [ ! -f "$C_DAY" -o "$(cat $C_DAY 2>/dev/null)" != "$DAY" ]; then
         echo $DAY > "$C_DAY"
-        lxc-ls -f | awk '$1!~/pe-master|puppet|NAME/{print $1}' | shuf > "$SWARM"
+        lxc-ls -f | awk '$1~/'$AWK_LXC_PATTERN'/{print $1}' | shuf > "$SWARM"
         rm -f "$P_SWARM" "$SWARM_PENDING" "$SWARM_DONE"
 
         ############################
