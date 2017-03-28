@@ -140,7 +140,7 @@ if [ -f "$LOCK" ]; then
     exit 1
 fi
 
-trap "{ echo -e \"\nInterrupted, cleaning up and exiting ...\"; rm -f $LOCK; exit 1; }" SIGINT SIGTERM
+trap "{ echo -e \"\nInterrupted, cleaning up and exiting ...\"; rm -f $LOCK; exit 1; }" SIGINT SIGTERM SIGHUP
 touch $LOCK
 
 rm -f "$P_SWARM" "$SWARM_PENDING" "$SWARM_DONE" "$C_DAY" "$SWARM"
