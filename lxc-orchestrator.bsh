@@ -29,7 +29,7 @@ SWARM_DONE="/tmp/lxc-orch-swarm-cycled.dat"
 C_DAY="/tmp/lxc-orch-swarm-day.dat"
 # Lock file
 LOCK="/tmp/lxc-orch-swarm.lock"
-AWK_LXC="pe?-c-[0-9]+"   # regex to exclude LXCs
+AWK_LXC_PATTERN="pe?-c-[0-9]+"   # regex to exclude LXCs
 
 # -------------------------------------------------------------------
 P_SIZE=8            # Number of protected intances
